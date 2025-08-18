@@ -39,7 +39,7 @@ func LoadEnv() (*Env, error) {
 	v.SetDefault("POSTGRES_HOST", "localhost")
 	v.SetDefault("POSTGRES_USER", "postgres")
 	v.SetDefault("POSTGRES_PASSWORD", "postgres")
-	v.SetDefault("POSTGRES_NAME", "postgres")
+	v.SetDefault("POSTGRES_CONTAINER_DB", "postgres")
 	v.SetDefault("POSTGRES_PORT", "5432")
 	v.SetDefault("ZAP_LEVEL", "info")
 	v.SetDefault("ZAP_FILEPATH", "./logs/app.log")

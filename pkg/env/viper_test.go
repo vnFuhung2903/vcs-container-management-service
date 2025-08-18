@@ -22,7 +22,7 @@ func (suite *ViperSuite) SetupTest() {
 		"MAIL_PASSWORD",
 		"POSTGRES_USER",
 		"POSTGRES_PASSWORD",
-		"POSTGRES_NAME",
+		"POSTGRES_CONTAINER_DB",
 		"ZAP_LEVEL",
 		"ZAP_FILEPATH",
 		"ZAP_MAXSIZE",
@@ -44,17 +44,17 @@ func (suite *ViperSuite) createEnvVars(vars map[string]string) {
 
 func (suite *ViperSuite) TestLoadEnv() {
 	envContent := map[string]string{
-		"JWT_SECRET_KEY":    "test_jwt_secret",
-		"POSTGRES_HOST":     "postgres_host",
-		"POSTGRES_USER":     "test_user",
-		"POSTGRES_PASSWORD": "test_db_password",
-		"POSTGRES_NAME":     "test_db",
-		"POSTGRES_PORT":     "5432",
-		"ZAP_LEVEL":         "info",
-		"ZAP_FILEPATH":      "/tmp/app.log",
-		"ZAP_MAXSIZE":       "100",
-		"ZAP_MAXAGE":        "30",
-		"ZAP_MAXBACKUPS":    "5",
+		"JWT_SECRET_KEY":        "test_jwt_secret",
+		"POSTGRES_HOST":         "postgres_host",
+		"POSTGRES_USER":         "test_user",
+		"POSTGRES_PASSWORD":     "test_db_password",
+		"POSTGRES_CONTAINER_DB": "test_db",
+		"POSTGRES_PORT":         "5432",
+		"ZAP_LEVEL":             "info",
+		"ZAP_FILEPATH":          "/tmp/app.log",
+		"ZAP_MAXSIZE":           "100",
+		"ZAP_MAXAGE":            "30",
+		"ZAP_MAXBACKUPS":        "5",
 	}
 
 	suite.createEnvVars(envContent)
@@ -122,11 +122,11 @@ func (suite *ViperSuite) TestLoadEnvInvalidLoggerValues() {
 
 func (suite *ViperSuite) TestLoadEnvEmptyPostgresValues() {
 	envContent := map[string]string{
-		"JWT_SECRET_KEY": "test_jwt_secret",
-		"POSTGRES_HOST":  "",
-		"POSTGRES_USER":  "",
-		"POSTGRES_NAME":  "",
-		"POSTGRES_PORT":  "",
+		"JWT_SECRET_KEY":        "test_jwt_secret",
+		"POSTGRES_HOST":         "",
+		"POSTGRES_USER":         "",
+		"POSTGRES_CONTAINER_DB": "",
+		"POSTGRES_PORT":         "",
 	}
 
 	suite.createEnvVars(envContent)
