@@ -41,7 +41,7 @@ definitions:
     x-enum-varnames:
     - ContainerOn
     - ContainerOff
-host: localhost:8080
+host: localhost:8081
 info:
   contact: {}
   description: Container Management System API

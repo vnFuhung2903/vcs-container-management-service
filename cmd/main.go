@@ -58,7 +58,7 @@ func main() {
 	r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
 
 	if err := r.Run(":8081"); err != nil {
-		log.Fatalf("Failed to run container: %v", err)
+		log.Fatalf("Failed to run service: %v", err)
 	} else {
 		logger.Info("Container management service is running on port 8081")
 	}
