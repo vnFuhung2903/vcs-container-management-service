@@ -6,10 +6,10 @@ import (
 
 type Container struct {
 	ContainerId   string          `gorm:"primaryKey"`
-	Status        ContainerStatus `gorm:"type:varchar(10);not null"`
+	Status        ContainerStatus `gorm:"type:varchar(10);not null;index:idx_status,priority:1"`
 	CreatedAt     time.Time       `gorm:"autoCreateTime"`
 	UpdatedAt     time.Time       `gorm:"autoUpdateTime"`
-	ContainerName string          `gorm:"unique;not null"`
+	ContainerName string          `gorm:"index:idx_container_name,priority:2;not null"`
 	Ipv4          string          `gorm:"not null"`
 }
 

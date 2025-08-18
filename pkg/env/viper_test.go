@@ -2,7 +2,6 @@ package env
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -10,17 +9,6 @@ import (
 
 type ViperSuite struct {
 	suite.Suite
-	tempDir string
-}
-
-func (suite *ViperSuite) SetupSuite() {
-	tempDir, err := os.MkdirTemp("", "viper_test")
-	suite.Require().NoError(err)
-	suite.tempDir = tempDir
-}
-
-func (suite *ViperSuite) TearDownSuite() {
-	os.RemoveAll(suite.tempDir)
 }
 
 func TestViperSuite(t *testing.T) {
@@ -47,28 +35,30 @@ func (suite *ViperSuite) SetupTest() {
 	}
 }
 
-func (suite *ViperSuite) createEnvFile(content string) string {
-	envFile := filepath.Join(suite.tempDir, ".env")
-	err := os.WriteFile(envFile, []byte(content), 0644)
-	suite.Require().NoError(err)
-	return envFile
+func (suite *ViperSuite) createEnvVars(vars map[string]string) {
+	for k, v := range vars {
+		err := os.Setenv(k, v)
+		suite.Require().NoError(err)
+	}
 }
 
 func (suite *ViperSuite) TestLoadEnv() {
-	envContent := `JWT_SECRET_KEY=test_jwt_secret
-POSTGRES_HOST=postgres_host
-POSTGRES_USER=test_user
-POSTGRES_PASSWORD=test_db_password
-POSTGRES_NAME=test_db
-POSTGRES_PORT=5432
-ZAP_LEVEL=info
-ZAP_FILEPATH=/tmp/app.log
-ZAP_MAXSIZE=100
-ZAP_MAXAGE=30
-ZAP_MAXBACKUPS=5`
+	envContent := map[string]string{
+		"JWT_SECRET_KEY":    "test_jwt_secret",
+		"POSTGRES_HOST":     "postgres_host",
+		"POSTGRES_USER":     "test_user",
+		"POSTGRES_PASSWORD": "test_db_password",
+		"POSTGRES_NAME":     "test_db",
+		"POSTGRES_PORT":     "5432",
+		"ZAP_LEVEL":         "info",
+		"ZAP_FILEPATH":      "/tmp/app.log",
+		"ZAP_MAXSIZE":       "100",
+		"ZAP_MAXAGE":        "30",
+		"ZAP_MAXBACKUPS":    "5",
+	}
 
-	suite.createEnvFile(envContent)
-	env, err := LoadEnv(suite.tempDir)
+	suite.createEnvVars(envContent)
+	env, err := LoadEnv()
 	suite.NoError(err)
 	suite.NotNil(env)
 
@@ -88,11 +78,13 @@ ZAP_MAXBACKUPS=5`
 }
 
 func (suite *ViperSuite) TestLoadEnvPartialConfig() {
-	envContent := `JWT_SECRET_KEY=partial_secret
-POSTGRES_USER=partial_user`
-	suite.createEnvFile(envContent)
+	envContent := map[string]string{
+		"JWT_SECRET_KEY": "partial_secret",
+		"POSTGRES_USER":  "partial_user",
+	}
+	suite.createEnvVars(envContent)
 
-	env, err := LoadEnv(suite.tempDir)
+	env, err := LoadEnv()
 	suite.NoError(err)
 	suite.NotNil(env)
 
@@ -105,58 +97,40 @@ POSTGRES_USER=partial_user`
 	suite.Equal("partial_user", env.PostgresEnv.PostgresUser)
 }
 
-func (suite *ViperSuite) TestLoadEnvConfigFileNotFound() {
-	nonExistentPath := "/path/that/does/not/exist"
-	env, err := LoadEnv(nonExistentPath)
-	suite.Error(err)
-	suite.Nil(env)
-	suite.Contains(err.Error(), "Config File \".env\" Not Found")
-}
-
-func (suite *ViperSuite) TestLoadEnvInvalidConfigPath() {
-	invalidPath := filepath.Join(suite.tempDir, "not_a_directory.txt")
-	err := os.WriteFile(invalidPath, []byte("content"), 0644)
-	suite.Require().NoError(err)
-
-	env, err := LoadEnv(invalidPath)
-	suite.Error(err)
-	suite.Nil(env)
-}
-
 func (suite *ViperSuite) TestLoadEnvEmptyConfig() {
-	suite.createEnvFile("")
+	envContent := map[string]string{}
+	suite.createEnvVars(envContent)
 
-	env, err := LoadEnv(suite.tempDir)
+	env, err := LoadEnv()
 	suite.Error(err)
 	suite.Nil(env)
 }
 
 func (suite *ViperSuite) TestLoadEnvInvalidLoggerValues() {
-	envContent := `JWT_SECRET_KEY=test_jwt_secret
-ZAP_MAXSIZE=invalid_number
-ZAP_MAXAGE=also_invalid
-ZAP_MAXBACKUPS=not_a_number
-MAIL_USERNAME=test@example.com
-MAIL_PASSWORD=test_password`
-
-	suite.createEnvFile(envContent)
-	env, err := LoadEnv(suite.tempDir)
+	envContent := map[string]string{
+		"JWT_SECRET_KEY": "test_jwt_secret",
+		"ZAP_MAXSIZE":    "invalid_number",
+		"ZAP_MAXAGE":     "invalid_number",
+		"ZAP_MAXBACKUPS": "invalid_number",
+	}
+	suite.createEnvVars(envContent)
+	env, err := LoadEnv()
 
 	suite.Error(err)
 	suite.Nil(env)
 }
 
 func (suite *ViperSuite) TestLoadEnvEmptyPostgresValues() {
-	envContent := `JWT_SECRET_KEY=test_jwt_secret
-POSTGRES_HOST=
-POSTGRES_USER=
-POSTGRES_NAME=
-POSTGRES_PORT=
-MAIL_USERNAME=test@example.com
-MAIL_PASSWORD=test_password`
+	envContent := map[string]string{
+		"JWT_SECRET_KEY": "test_jwt_secret",
+		"POSTGRES_HOST":  "",
+		"POSTGRES_USER":  "",
+		"POSTGRES_NAME":  "",
+		"POSTGRES_PORT":  "",
+	}
 
-	suite.createEnvFile(envContent)
-	env, err := LoadEnv(suite.tempDir)
+	suite.createEnvVars(envContent)
+	env, err := LoadEnv()
 
 	suite.Error(err)
 	suite.Nil(env)

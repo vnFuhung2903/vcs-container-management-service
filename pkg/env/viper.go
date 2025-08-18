@@ -7,23 +7,23 @@ import (
 )
 
 type AuthEnv struct {
-	JWTSecret string `mapstructure:"JWT_SECRET_KEY"`
+	JWTSecret string
 }
 
 type PostgresEnv struct {
-	PostgresHost     string `mapstructure:"POSTGRES_HOST"`
-	PostgresUser     string `mapstructure:"POSTGRES_USER"`
-	PostgresPassword string `mapstructure:"POSTGRES_PASSWORD"`
-	PostgresName     string `mapstructure:"POSTGRES_NAME"`
-	PostgresPort     string `mapstructure:"POSTGRES_PORT"`
+	PostgresHost     string
+	PostgresUser     string
+	PostgresPassword string
+	PostgresName     string
+	PostgresPort     string
 }
 
 type LoggerEnv struct {
-	Level      string `mapstructure:"ZAP_LEVEL"`
-	FilePath   string `mapstructure:"ZAP_FILEPATH"`
-	MaxSize    int    `mapstructure:"ZAP_MAXSIZE"`
-	MaxAge     int    `mapstructure:"ZAP_MAXAGE"`
-	MaxBackups int    `mapstructure:"ZAP_MAXBACKUPS"`
+	Level      string
+	FilePath   string
+	MaxSize    int
+	MaxAge     int
+	MaxBackups int
 }
 
 type Env struct {
@@ -32,7 +32,7 @@ type Env struct {
 	LoggerEnv   LoggerEnv
 }
 
-func LoadEnv(path string) (*Env, error) {
+func LoadEnv() (*Env, error) {
 	v := viper.New()
 	v.AutomaticEnv()
 
@@ -47,25 +47,35 @@ func LoadEnv(path string) (*Env, error) {
 	v.SetDefault("ZAP_MAXAGE", 10)
 	v.SetDefault("ZAP_MAXBACKUPS", 30)
 
-	if err := v.ReadInConfig(); err != nil {
-		return nil, err
+	authEnv := AuthEnv{
+		JWTSecret: v.GetString("JWT_SECRET_KEY"),
+	}
+	if authEnv.JWTSecret == "" {
+		return nil, errors.New("auth environment variables are empty")
 	}
 
-	var authEnv AuthEnv
-	var loggerEnv LoggerEnv
-	var postgresEnv PostgresEnv
+	postgresEnv := PostgresEnv{
+		PostgresHost:     v.GetString("POSTGRES_HOST"),
+		PostgresUser:     v.GetString("POSTGRES_USER"),
+		PostgresPassword: v.GetString("POSTGRES_PASSWORD"),
+		PostgresName:     v.GetString("POSTGRES_CONTAINER_DB"),
+		PostgresPort:     v.GetString("POSTGRES_PORT"),
+	}
+	if postgresEnv.PostgresHost == "" || postgresEnv.PostgresUser == "" || postgresEnv.PostgresPassword == "" || postgresEnv.PostgresName == "" || postgresEnv.PostgresPort == "" {
+		return nil, errors.New("postgres environment variables are empty")
+	}
 
-	if err := v.Unmarshal(&authEnv); err != nil || authEnv.JWTSecret == "" {
-		err = errors.New("auth environment variables are empty")
-		return nil, err
+	loggerEnv := LoggerEnv{
+		Level:      v.GetString("ZAP_LEVEL"),
+		FilePath:   v.GetString("ZAP_FILEPATH"),
+		MaxSize:    v.GetInt("ZAP_MAXSIZE"),
+		MaxAge:     v.GetInt("ZAP_MAXAGE"),
+		MaxBackups: v.GetInt("ZAP_MAXBACKUPS"),
 	}
-	if err := v.Unmarshal(&loggerEnv); err != nil {
-		return nil, err
+	if loggerEnv.Level == "" || loggerEnv.FilePath == "" || loggerEnv.MaxSize <= 0 || loggerEnv.MaxAge <= 0 || loggerEnv.MaxBackups <= 0 {
+		return nil, errors.New("logger environment variables are empty or invalid")
 	}
-	if err := v.Unmarshal(&postgresEnv); err != nil || postgresEnv.PostgresUser == "" || postgresEnv.PostgresName == "" || postgresEnv.PostgresHost == "" || postgresEnv.PostgresPort == "" {
-		err = errors.New("posgres environment variables are empty")
-		return nil, err
-	}
+
 	return &Env{
 		AuthEnv:     authEnv,
 		PostgresEnv: postgresEnv,

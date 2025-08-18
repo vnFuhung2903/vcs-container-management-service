@@ -1,0 +1,329 @@
+basePath: /
+definitions:
+  dto.APIResponse:
+    properties:
+      code:
+        type: string
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  dto.ContainerUpdate:
+    properties:
+      status:
+        allOf:
+        - $ref: '#/definitions/entities.ContainerStatus'
+        enum:
+        - "ON"
+        - "OFF"
+    required:
+    - status
+    type: object
+  dto.CreateRequest:
+    properties:
+      container_name:
+        type: string
+      image_name:
+        type: string
+    required:
+    - container_name
+    - image_name
+    type: object
+  entities.ContainerStatus:
+    enum:
+    - "ON"
+    - "OFF"
+    type: string
+    x-enum-varnames:
+    - ContainerOn
+    - ContainerOff
+host: localhost:8080
+info:
+  contact: {}
+  description: Container Management System API
+  title: VCS SMS API
+  version: "1.0"
+paths:
+  /containers/create:
+    post:
+      consumes:
+      - application/json
+      description: Create a container with name and image
+      parameters:
+      - description: Container creation request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Container created successfully
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new container
+      tags:
+      - containers
+  /containers/delete/{id}:
+    delete:
+      description: Delete a container by its ID
+      parameters:
+      - description: Container ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Container deleted successfully
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a container
+      tags:
+      - containers
+  /containers/export:
+    get:
+      description: Export containers with optional filters and sorting to an Excel
+        file
+      parameters:
+      - default: 1
+        description: From index (default 1)
+        in: query
+        name: from
+        type: integer
+      - default: -1
+        description: To index (default -1 for all)
+        in: query
+        name: to
+        type: integer
+      - description: Filter by ContainerId
+        in: query
+        name: container_id
+        type: string
+      - description: Filter by ContainerName
+        in: query
+        name: container_name
+        type: string
+      - description: Filter by Status
+        enum:
+        - "ON"
+        - "OFF"
+        in: query
+        name: status
+        type: string
+      - description: Filter by IPv4
+        in: query
+        name: ipv4
+        type: string
+      - description: Sort by field
+        enum:
+        - container_id
+        - container_name
+        - status
+        - ipv4
+        - created_at
+        - updated_at
+        in: query
+        name: field
+        required: true
+        type: string
+      - description: Sort order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        required: true
+        type: string
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "200":
+          description: Excel file containing container data
+          schema:
+            type: file
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Export containers to Excel
+      tags:
+      - containers
+  /containers/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Import containers using an Excel (.xlsx) file
+      parameters:
+      - description: Excel file containing container data
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Import result with success and failure counts
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Import containers from Excel
+      tags:
+      - containers
+  /containers/update/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Update container information by container ID
+      parameters:
+      - description: Container ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Container update payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ContainerUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Container updated successfully
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a container
+      tags:
+      - containers
+  /containers/view:
+    get:
+      description: Retrieve a list of containers with optional pagination, filtering,
+        and sorting
+      parameters:
+      - default: 1
+        description: From index (default 1)
+        in: query
+        name: from
+        type: integer
+      - default: -1
+        description: To index (default -1 for all)
+        in: query
+        name: to
+        type: integer
+      - description: Filter by ContainerId
+        in: query
+        name: container_id
+        type: string
+      - description: Filter by ContainerName
+        in: query
+        name: container_name
+        type: string
+      - description: Filter by Status
+        enum:
+        - "ON"
+        - "OFF"
+        in: query
+        name: status
+        type: string
+      - description: Filter by IPv4
+        in: query
+        name: ipv4
+        type: string
+      - description: Sort by field
+        enum:
+        - container_id
+        - container_name
+        - status
+        - ipv4
+        - created_at
+        - updated_at
+        in: query
+        name: field
+        required: true
+        type: string
+      - description: Sort order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successful response with container list
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: View containers
+      tags:
+      - containers
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
