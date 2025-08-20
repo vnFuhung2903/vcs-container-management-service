@@ -17,6 +17,7 @@ import (
 	"github.com/vnFuhung2903/vcs-container-management-service/dto"
 	"github.com/vnFuhung2903/vcs-container-management-service/entities"
 	"github.com/vnFuhung2903/vcs-container-management-service/mocks/docker"
+	"github.com/vnFuhung2903/vcs-container-management-service/mocks/interfaces"
 	"github.com/vnFuhung2903/vcs-container-management-service/mocks/logger"
 	"github.com/vnFuhung2903/vcs-container-management-service/mocks/repositories"
 )
@@ -27,6 +28,7 @@ type ContainerServiceSuite struct {
 	containerService IContainerService
 	mockRepo         *repositories.MockIContainerRepository
 	dockerClient     *docker.MockIDockerClient
+	redisClient      *interfaces.MockIRedisClient
 	logger           *logger.MockILogger
 	ctx              context.Context
 }
@@ -35,8 +37,9 @@ func (s *ContainerServiceSuite) SetupTest() {
 	s.ctrl = gomock.NewController(s.T())
 	s.mockRepo = repositories.NewMockIContainerRepository(s.ctrl)
 	s.dockerClient = docker.NewMockIDockerClient(s.ctrl)
+	s.redisClient = interfaces.NewMockIRedisClient(s.ctrl)
 	s.logger = logger.NewMockILogger(s.ctrl)
-	s.containerService = NewContainerService(s.mockRepo, s.dockerClient, s.logger)
+	s.containerService = NewContainerService(s.mockRepo, s.dockerClient, s.redisClient, s.logger)
 	s.ctx = context.Background()
 }
 

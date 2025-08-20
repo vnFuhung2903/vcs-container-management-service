@@ -126,3 +126,29 @@ func (suite *DatabasesSuite) TestConnectPostgresDbInvalidPort() {
 	suite.Nil(db)
 	suite.Contains(err.Error(), "parse")
 }
+
+func (suite *DatabasesSuite) TestConnectRedis() {
+	ctx := context.Background()
+
+	req := testcontainers.ContainerRequest{
+		Image:        "redis:latest",
+		ExposedPorts: []string{"6379/tcp"},
+		WaitingFor:   wait.ForListeningPort("6379/tcp"),
+	}
+	redisContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	suite.NoError(err)
+	defer func() { _ = redisContainer.Terminate(ctx) }()
+
+	env := env.RedisEnv{
+		RedisAddress:  "localhost:6379",
+		RedisPassword: "",
+		RedisDb:       0,
+	}
+
+	redisFactory := NewRedisFactory(env)
+	redisClient := redisFactory.ConnectRedis()
+	suite.NotNil(redisClient)
+}

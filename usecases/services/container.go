@@ -9,9 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"slices"
+
 	"github.com/containerd/errdefs"
 	"github.com/vnFuhung2903/vcs-container-management-service/dto"
 	"github.com/vnFuhung2903/vcs-container-management-service/entities"
+	"github.com/vnFuhung2903/vcs-container-management-service/interfaces"
 	"github.com/vnFuhung2903/vcs-container-management-service/pkg/docker"
 	"github.com/vnFuhung2903/vcs-container-management-service/pkg/logger"
 	"github.com/vnFuhung2903/vcs-container-management-service/usecases/repositories"
@@ -28,24 +31,42 @@ type IContainerService interface {
 	Delete(ctx context.Context, containerId string) error
 }
 
-type ContainerService struct {
+type containerService struct {
 	containerRepo repositories.IContainerRepository
 	dockerClient  docker.IDockerClient
+	redisClient   interfaces.IRedisClient
 	logger        logger.ILogger
 }
 
-func NewContainerService(repo repositories.IContainerRepository, dockerClient docker.IDockerClient, logger logger.ILogger) IContainerService {
-	return &ContainerService{
+func NewContainerService(repo repositories.IContainerRepository, dockerClient docker.IDockerClient, redisClient interfaces.IRedisClient, logger logger.ILogger) IContainerService {
+	return &containerService{
 		containerRepo: repo,
 		dockerClient:  dockerClient,
+		redisClient:   redisClient,
 		logger:        logger,
 	}
 }
 
-func (s *ContainerService) Create(ctx context.Context, containerName string, imageName string) (*entities.Container, error) {
+func (s *containerService) Create(ctx context.Context, containerName string, imageName string) (*entities.Container, error) {
+	containers, err := s.redisClient.Get(ctx, "containers")
+	if err != nil {
+		s.logger.Error("failed to retrieve containers from redis", zap.Error(err))
+		return nil, err
+	}
+
 	con, err := s.dockerClient.Create(ctx, containerName, imageName)
 	if err != nil {
 		s.logger.Error("failed to create docker container", zap.Error(err))
+		return nil, err
+	}
+
+	containers = append(containers, con.ID)
+	if err := s.redisClient.Set(ctx, "containers", containers); err != nil {
+		s.logger.Error("failed to set containers in redis", zap.Error(err))
+		if err := s.dockerClient.Delete(ctx, con.ID); err != nil {
+			s.logger.Error("failed to delete docker container", zap.Error(err))
+			return nil, err
+		}
 		return nil, err
 	}
 
@@ -74,7 +95,7 @@ func (s *ContainerService) Create(ctx context.Context, containerName string, ima
 	return container, nil
 }
 
-func (s *ContainerService) View(ctx context.Context, filter dto.ContainerFilter, from int, to int, sort dto.ContainerSort) ([]*entities.Container, int64, error) {
+func (s *containerService) View(ctx context.Context, filter dto.ContainerFilter, from int, to int, sort dto.ContainerSort) ([]*entities.Container, int64, error) {
 	if from < 1 {
 		err := errors.New("invalid range")
 		s.logger.Error("failed to view containers", zap.Error(err))
@@ -92,7 +113,7 @@ func (s *ContainerService) View(ctx context.Context, filter dto.ContainerFilter,
 	return containers, total, nil
 }
 
-func (s *ContainerService) Update(ctx context.Context, containerId string, updateData dto.ContainerUpdate) error {
+func (s *containerService) Update(ctx context.Context, containerId string, updateData dto.ContainerUpdate) error {
 	if updateData.Status != entities.ContainerOn && updateData.Status != entities.ContainerOff {
 		return fmt.Errorf("invalid status: %s", updateData.Status)
 	}
@@ -120,7 +141,7 @@ func (s *ContainerService) Update(ctx context.Context, containerId string, updat
 	return nil
 }
 
-func (s *ContainerService) Delete(ctx context.Context, containerId string) error {
+func (s *containerService) Delete(ctx context.Context, containerId string) error {
 	if err := s.dockerClient.Stop(ctx, containerId); err != nil && !errdefs.IsNotFound(err) {
 		s.logger.Error("failed to stop docker container", zap.Error(err))
 		return err
@@ -131,15 +152,34 @@ func (s *ContainerService) Delete(ctx context.Context, containerId string) error
 		return err
 	}
 
+	containers, err := s.redisClient.Get(ctx, "containers")
+	if err != nil {
+		s.logger.Error("failed to retrieve containers from redis", zap.Error(err))
+		return err
+	}
+
+	for i, container := range containers {
+		if container == containerId {
+			containers = slices.Delete(containers, i, i+1)
+			break
+		}
+	}
+
+	if err := s.redisClient.Set(ctx, "containers", containers); err != nil {
+		s.logger.Error("failed to update containers in redis", zap.Error(err))
+		return err
+	}
+
 	if err := s.containerRepo.Delete(containerId); err != nil {
 		s.logger.Error("failed to delete container", zap.Error(err))
 		return err
 	}
+
 	s.logger.Info("container deleted successfully", zap.String("containerId", containerId))
 	return nil
 }
 
-func (s *ContainerService) Import(ctx context.Context, file multipart.File) (*dto.ImportResponse, error) {
+func (s *containerService) Import(ctx context.Context, file multipart.File) (*dto.ImportResponse, error) {
 	f, err := excelize.OpenReader(file)
 	if err != nil {
 		s.logger.Error("failed to import containers", zap.Error(err))
@@ -225,7 +265,7 @@ func (s *ContainerService) Import(ctx context.Context, file multipart.File) (*dt
 	return result, nil
 }
 
-func (s *ContainerService) Export(ctx context.Context, filter dto.ContainerFilter, from int, to int, sort dto.ContainerSort) ([]byte, error) {
+func (s *containerService) Export(ctx context.Context, filter dto.ContainerFilter, from int, to int, sort dto.ContainerSort) ([]byte, error) {
 	if from < 1 {
 		err := errors.New("invalid range")
 		s.logger.Error("failed to export containers", zap.Error(err))

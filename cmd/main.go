@@ -10,6 +10,7 @@ import (
 	_ "github.com/vnFuhung2903/vcs-container-management-service/docs"
 	"github.com/vnFuhung2903/vcs-container-management-service/entities"
 	"github.com/vnFuhung2903/vcs-container-management-service/infrastructures/databases"
+	"github.com/vnFuhung2903/vcs-container-management-service/interfaces"
 	"github.com/vnFuhung2903/vcs-container-management-service/pkg/docker"
 	"github.com/vnFuhung2903/vcs-container-management-service/pkg/env"
 	"github.com/vnFuhung2903/vcs-container-management-service/pkg/logger"
@@ -43,6 +44,9 @@ func main() {
 	}
 	postgresDb.AutoMigrate(&entities.Container{})
 
+	redisRawClient := databases.NewRedisFactory(env.RedisEnv).ConnectRedis()
+	redisClient := interfaces.NewRedisClient(redisRawClient)
+
 	dockerClient, err := docker.NewDockerClient()
 	if err != nil {
 		log.Fatalf("Failed to create docker client: %v", err)
@@ -50,7 +54,7 @@ func main() {
 	jwtMiddleware := middlewares.NewJWTMiddleware(env.AuthEnv)
 
 	containerRepository := repositories.NewContainerRepository(postgresDb)
-	containerService := services.NewContainerService(containerRepository, dockerClient, logger)
+	containerService := services.NewContainerService(containerRepository, dockerClient, redisClient, logger)
 	containerHandler := api.NewContainerHandler(containerService, jwtMiddleware)
 
 	r := gin.Default()
