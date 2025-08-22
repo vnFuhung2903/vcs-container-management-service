@@ -60,22 +60,30 @@ func (s *containerService) Create(ctx context.Context, containerName string, ima
 		return nil, err
 	}
 
-	containers = append(containers, con.ID)
-	if err := s.redisClient.Set(ctx, "containers", containers); err != nil {
-		s.logger.Error("failed to set containers in redis", zap.Error(err))
-		if err := s.dockerClient.Delete(ctx, con.ID); err != nil {
-			s.logger.Error("failed to delete docker container", zap.Error(err))
-			return nil, err
-		}
-		return nil, err
-	}
-
 	if err := s.dockerClient.Start(ctx, con.ID); err != nil {
 		s.logger.Error("failed to start docker container", zap.Error(err))
 	}
 
 	status := s.dockerClient.GetStatus(ctx, con.ID)
 	ipv4 := s.dockerClient.GetIpv4(ctx, con.ID)
+
+	containers = slices.Insert(containers, len(containers), entities.ContainerWithStatus{
+		ContainerId: con.ID,
+		Status:      status,
+	})
+
+	if err := s.redisClient.Set(ctx, "containers", containers); err != nil {
+		s.logger.Error("failed to set containers in redis", zap.Error(err))
+		if err := s.dockerClient.Stop(ctx, con.ID); err != nil {
+			s.logger.Error("failed to stop docker container", zap.Error(err))
+			return nil, err
+		}
+		if err := s.dockerClient.Delete(ctx, con.ID); err != nil {
+			s.logger.Error("failed to delete docker container", zap.Error(err))
+			return nil, err
+		}
+		return nil, err
+	}
 
 	container, err := s.containerRepo.Create(con.ID, containerName, status, ipv4)
 	if err != nil {
@@ -133,6 +141,30 @@ func (s *containerService) Update(ctx context.Context, containerId string, updat
 	status := s.dockerClient.GetStatus(ctx, containerId)
 	ipv4 := s.dockerClient.GetIpv4(ctx, containerId)
 
+	containers, err := s.redisClient.Get(ctx, "containers")
+	if err != nil {
+		s.logger.Error("failed to retrieve containers from redis", zap.Error(err))
+		return err
+	}
+
+	index := slices.IndexFunc(containers, func(c entities.ContainerWithStatus) bool {
+		return c.ContainerId == containerId
+	})
+	if index == -1 {
+		s.logger.Warn("container not found in redis", zap.String("containerId", containerId))
+		containers = slices.Insert(containers, len(containers), entities.ContainerWithStatus{
+			ContainerId: containerId,
+			Status:      status,
+		})
+		index = len(containers) - 1
+	}
+	containers[index].Status = status
+
+	if err := s.redisClient.Set(ctx, "containers", containers); err != nil {
+		s.logger.Error("failed to update containers in redis", zap.Error(err))
+		return err
+	}
+
 	if err := s.containerRepo.Update(containerId, status, ipv4); err != nil {
 		s.logger.Error("failed to update container", zap.Error(err))
 		return err
@@ -142,13 +174,8 @@ func (s *containerService) Update(ctx context.Context, containerId string, updat
 }
 
 func (s *containerService) Delete(ctx context.Context, containerId string) error {
-	if err := s.dockerClient.Stop(ctx, containerId); err != nil && !errdefs.IsNotFound(err) {
-		s.logger.Error("failed to stop docker container", zap.Error(err))
-		return err
-	}
-
-	if err := s.dockerClient.Delete(ctx, containerId); err != nil && !errdefs.IsNotFound(err) {
-		s.logger.Error("failed to delete docker container", zap.Error(err))
+	if err := s.containerRepo.Delete(containerId); err != nil {
+		s.logger.Error("failed to delete container", zap.Error(err))
 		return err
 	}
 
@@ -158,20 +185,23 @@ func (s *containerService) Delete(ctx context.Context, containerId string) error
 		return err
 	}
 
-	for i, container := range containers {
-		if container == containerId {
-			containers = slices.Delete(containers, i, i+1)
-			break
-		}
-	}
+	containers = slices.DeleteFunc(containers, func(c entities.ContainerWithStatus) bool {
+		return c.ContainerId == containerId
+	})
+	containers = slices.Clip(containers)
 
 	if err := s.redisClient.Set(ctx, "containers", containers); err != nil {
 		s.logger.Error("failed to update containers in redis", zap.Error(err))
 		return err
 	}
 
-	if err := s.containerRepo.Delete(containerId); err != nil {
-		s.logger.Error("failed to delete container", zap.Error(err))
+	if err := s.dockerClient.Stop(ctx, containerId); err != nil && !errdefs.IsNotFound(err) {
+		s.logger.Error("failed to stop docker container", zap.Error(err))
+		return err
+	}
+
+	if err := s.dockerClient.Delete(ctx, containerId); err != nil && !errdefs.IsNotFound(err) {
+		s.logger.Error("failed to delete docker container", zap.Error(err))
 		return err
 	}
 
