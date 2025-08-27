@@ -10,16 +10,16 @@ import (
 	"github.com/vnFuhung2903/vcs-container-management-service/usecases/services"
 )
 
-type ContainerHandler struct {
+type containerHandler struct {
 	containerService services.IContainerService
 	jwtMiddleware    middlewares.IJWTMiddleware
 }
 
-func NewContainerHandler(containerService services.IContainerService, jwtMiddleware middlewares.IJWTMiddleware) *ContainerHandler {
-	return &ContainerHandler{containerService, jwtMiddleware}
+func NewContainerHandler(containerService services.IContainerService, jwtMiddleware middlewares.IJWTMiddleware) *containerHandler {
+	return &containerHandler{containerService, jwtMiddleware}
 }
 
-func (h *ContainerHandler) SetupRoutes(r *gin.Engine) {
+func (h *containerHandler) SetupRoutes(r *gin.Engine) {
 	containerRoutes := r.Group("/containers")
 	{
 		createGroup := containerRoutes.Group("", h.jwtMiddleware.RequireScope("container:create"))
@@ -58,7 +58,7 @@ func (h *ContainerHandler) SetupRoutes(r *gin.Engine) {
 // @Failure 500 {object} dto.APIResponse "Internal server error"
 // @Security BearerAuth
 // @Router /containers/create [post]
-func (h *ContainerHandler) Create(c *gin.Context) {
+func (h *containerHandler) Create(c *gin.Context) {
 	var req dto.CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, dto.APIResponse{
@@ -106,7 +106,7 @@ func (h *ContainerHandler) Create(c *gin.Context) {
 // @Failure 500 {object} dto.APIResponse "Internal server error"
 // @Security BearerAuth
 // @Router /containers/view [get]
-func (h *ContainerHandler) View(c *gin.Context) {
+func (h *containerHandler) View(c *gin.Context) {
 	from, err := strconv.Atoi(c.DefaultQuery("from", "1"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.APIResponse{
@@ -185,7 +185,7 @@ func (h *ContainerHandler) View(c *gin.Context) {
 // @Failure 500 {object} dto.APIResponse "Internal server error"
 // @Security BearerAuth
 // @Router /containers/update/{id} [put]
-func (h *ContainerHandler) Update(c *gin.Context) {
+func (h *containerHandler) Update(c *gin.Context) {
 	containerId := c.Param("id")
 
 	var updateData dto.ContainerUpdate
@@ -227,7 +227,7 @@ func (h *ContainerHandler) Update(c *gin.Context) {
 // @Failure 500 {object} dto.APIResponse "Internal server error"
 // @Security BearerAuth
 // @Router /containers/delete/{id} [delete]
-func (h *ContainerHandler) Delete(c *gin.Context) {
+func (h *containerHandler) Delete(c *gin.Context) {
 	containerId := c.Param("id")
 	err := h.containerService.Delete(c.Request.Context(), containerId)
 	if err != nil {
@@ -259,7 +259,7 @@ func (h *ContainerHandler) Delete(c *gin.Context) {
 // @Failure 500 {object} dto.APIResponse "Internal server error"
 // @Security BearerAuth
 // @Router /containers/import [post]
-func (h *ContainerHandler) Import(c *gin.Context) {
+func (h *containerHandler) Import(c *gin.Context) {
 	file, _, err := c.Request.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.APIResponse{
@@ -309,7 +309,7 @@ func (h *ContainerHandler) Import(c *gin.Context) {
 // @Failure 500 {object} dto.APIResponse "Internal server error"
 // @Security BearerAuth
 // @Router /containers/export [get]
-func (h *ContainerHandler) Export(c *gin.Context) {
+func (h *containerHandler) Export(c *gin.Context) {
 	from, err := strconv.Atoi(c.DefaultQuery("from", "1"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.APIResponse{

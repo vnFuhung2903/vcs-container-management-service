@@ -52,3 +52,9 @@ const (
 	Asc SortOrder = "asc"
 	Dsc SortOrder = "desc"
 )
+
+type KafkaStatusUpdate struct {
+	ContainerId string                   `json:"container_id"`
+	Status      entities.ContainerStatus `json:"status"`
+	Ipv4        string                   `json:"ipv4"`
+}

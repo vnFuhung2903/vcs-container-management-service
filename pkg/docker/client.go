@@ -20,7 +20,7 @@ type IDockerClient interface {
 	Delete(ctx context.Context, containerID string) error
 }
 
-type DockerClient struct {
+type dockerClient struct {
 	client *client.Client
 }
 
@@ -29,12 +29,12 @@ func NewDockerClient() (IDockerClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DockerClient{
+	return &dockerClient{
 		client: cli,
 	}, nil
 }
 
-func (c *DockerClient) Create(ctx context.Context, name string, imageName string) (*container.CreateResponse, error) {
+func (c *dockerClient) Create(ctx context.Context, name string, imageName string) (*container.CreateResponse, error) {
 	if err := c.PullImage(ctx, imageName); err != nil {
 		return nil, fmt.Errorf("failed to pull image: %w", err)
 	}
@@ -45,11 +45,11 @@ func (c *DockerClient) Create(ctx context.Context, name string, imageName string
 	return &con, err
 }
 
-func (c *DockerClient) Start(ctx context.Context, containerId string) error {
+func (c *dockerClient) Start(ctx context.Context, containerId string) error {
 	return c.client.ContainerStart(ctx, containerId, container.StartOptions{})
 }
 
-func (c *DockerClient) GetStatus(ctx context.Context, containerId string) entities.ContainerStatus {
+func (c *dockerClient) GetStatus(ctx context.Context, containerId string) entities.ContainerStatus {
 	inspect, err := c.client.ContainerInspect(ctx, containerId)
 	if err != nil {
 		return entities.ContainerOff
@@ -64,7 +64,7 @@ func (c *DockerClient) GetStatus(ctx context.Context, containerId string) entiti
 	return status
 }
 
-func (c *DockerClient) GetIpv4(ctx context.Context, containerId string) string {
+func (c *dockerClient) GetIpv4(ctx context.Context, containerId string) string {
 	inspect, err := c.client.ContainerInspect(ctx, containerId)
 	if err != nil {
 		return ""
@@ -78,17 +78,17 @@ func (c *DockerClient) GetIpv4(ctx context.Context, containerId string) string {
 	return ""
 }
 
-func (c *DockerClient) Stop(ctx context.Context, containerId string) error {
+func (c *dockerClient) Stop(ctx context.Context, containerId string) error {
 	return c.client.ContainerStop(ctx, containerId, container.StopOptions{})
 }
 
-func (c *DockerClient) Delete(ctx context.Context, containerId string) error {
+func (c *dockerClient) Delete(ctx context.Context, containerId string) error {
 	return c.client.ContainerRemove(ctx, containerId, container.RemoveOptions{
 		Force: true,
 	})
 }
 
-func (c *DockerClient) PullImage(ctx context.Context, refStr string) error {
+func (c *dockerClient) PullImage(ctx context.Context, refStr string) error {
 	resp, err := c.client.ImagePull(ctx, refStr, image.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)

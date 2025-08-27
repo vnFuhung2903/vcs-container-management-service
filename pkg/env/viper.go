@@ -10,6 +10,10 @@ type AuthEnv struct {
 	JWTSecret string
 }
 
+type KafkaEnv struct {
+	KafkaAddress string
+}
+
 type PostgresEnv struct {
 	PostgresHost     string
 	PostgresUser     string
@@ -34,6 +38,7 @@ type LoggerEnv struct {
 
 type Env struct {
 	AuthEnv     AuthEnv
+	KafkaEnv    KafkaEnv
 	PostgresEnv PostgresEnv
 	RedisEnv    RedisEnv
 	LoggerEnv   LoggerEnv
@@ -43,6 +48,7 @@ func LoadEnv() (*Env, error) {
 	v := viper.New()
 	v.AutomaticEnv()
 
+	v.SetDefault("KAFKA_ADDRESS", "localhost:9092")
 	v.SetDefault("POSTGRES_HOST", "localhost")
 	v.SetDefault("POSTGRES_USER", "postgres")
 	v.SetDefault("POSTGRES_PASSWORD", "postgres")
@@ -62,6 +68,13 @@ func LoadEnv() (*Env, error) {
 	}
 	if authEnv.JWTSecret == "" {
 		return nil, errors.New("auth environment variables are empty")
+	}
+
+	kafkaEnv := KafkaEnv{
+		KafkaAddress: v.GetString("KAFKA_ADDRESS"),
+	}
+	if kafkaEnv.KafkaAddress == "" {
+		return nil, errors.New("kafka environment variables are empty")
 	}
 
 	postgresEnv := PostgresEnv{
@@ -97,6 +110,7 @@ func LoadEnv() (*Env, error) {
 
 	return &Env{
 		AuthEnv:     authEnv,
+		KafkaEnv:    kafkaEnv,
 		PostgresEnv: postgresEnv,
 		RedisEnv:    redisEnv,
 		LoggerEnv:   loggerEnv,

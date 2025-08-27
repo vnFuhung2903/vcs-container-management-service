@@ -60,7 +60,7 @@ func (suite *DockerClientSuite) TestContainerOffLifeCycle() {
 }
 
 func (suite *DockerClientSuite) TestPullImageInvalidImage() {
-	dockerClient := suite.client.(*DockerClient)
+	dockerClient := suite.client.(*dockerClient)
 	err := dockerClient.PullImage(suite.ctx, "invalid/non-existent-image:invalid-tag")
 	suite.Error(err)
 	suite.Contains(strings.ToLower(err.Error()), "failed to pull image")

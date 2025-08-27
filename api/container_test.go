@@ -25,7 +25,7 @@ type ContainerHandlerSuite struct {
 	ctrl                 *gomock.Controller
 	mockContainerService *services.MockIContainerService
 	mockJWTMiddleware    *middlewares.MockIJWTMiddleware
-	handler              *ContainerHandler
+	handler              *containerHandler
 	router               *gin.Engine
 }
 
