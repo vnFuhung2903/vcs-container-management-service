@@ -31,6 +31,9 @@ import (
 // @in header
 // @name Authorization
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	env, err := env.LoadEnv()
 	if err != nil {
 		log.Fatalf("Failed to retrieve env: %v", err)
@@ -64,21 +67,23 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create kafka reader: %v", err)
 	}
-	kafkaConsumer := interfaces.NewKafkaConsumer(kafkaReader, containerRepository)
+	kafkaConsumer := interfaces.NewKafkaConsumer(kafkaReader, containerRepository, logger)
 
 	r := gin.Default()
 	containerHandler.SetupRoutes(r)
 	r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
 
+	go func() {
+		for {
+			if err := kafkaConsumer.Consume(ctx); err != nil {
+				logger.Error("Failed to consume message", zap.Error(err))
+			}
+		}
+	}()
+
 	if err := r.Run(":8081"); err != nil {
 		log.Fatalf("Failed to run service: %v", err)
 	} else {
 		logger.Info("Container management service is running on port 8081")
-	}
-
-	for {
-		if err := kafkaConsumer.Consume(context.Background()); err != nil {
-			logger.Error("Failed to consume message", zap.Error(err))
-		}
 	}
 }
