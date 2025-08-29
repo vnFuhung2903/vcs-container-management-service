@@ -16,7 +16,6 @@ func ConnectPostgresDb(env env.PostgresEnv) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	if err := db.AutoMigrate(&entities.Container{}); err != nil {
 		return nil, err
 	}

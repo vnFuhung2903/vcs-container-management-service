@@ -274,11 +274,6 @@ func (s *containerService) Import(ctx context.Context, file multipart.File) (*dt
 		status := s.dockerClient.GetStatus(ctx, con.ID)
 		ipv4 := s.dockerClient.GetIpv4(ctx, con.ID)
 
-		redisContainers = slices.Insert(redisContainers, len(redisContainers), entities.ContainerWithStatus{
-			ContainerId: con.ID,
-			Status:      status,
-		})
-
 		containers = append(containers, &entities.Container{
 			ContainerId:   con.ID,
 			ContainerName: containerName,
@@ -291,10 +286,6 @@ func (s *containerService) Import(ctx context.Context, file multipart.File) (*dt
 		result.FailedCount += len(containers)
 		for _, container := range containers {
 			result.FailedContainers = append(result.FailedContainers, container.ContainerName)
-			redisContainers = slices.DeleteFunc(redisContainers, func(c entities.ContainerWithStatus) bool {
-				return c.ContainerId == container.ContainerId
-			})
-			containers = slices.Clip(containers)
 			if err := s.dockerClient.Stop(ctx, container.ContainerId); err != nil {
 				s.logger.Error("failed to stop docker container", zap.String("container_id", container.ContainerId), zap.Error(err))
 			} else if err := s.dockerClient.Delete(ctx, container.ContainerId); err != nil {
@@ -305,6 +296,10 @@ func (s *containerService) Import(ctx context.Context, file multipart.File) (*dt
 		result.SuccessCount += len(containers)
 		for _, container := range containers {
 			result.SuccessContainers = append(result.SuccessContainers, container.ContainerName)
+			redisContainers = slices.Insert(redisContainers, len(redisContainers), entities.ContainerWithStatus{
+				ContainerId: container.ContainerId,
+				Status:      container.Status,
+			})
 		}
 		s.logger.Info("containers imported successfully")
 	}

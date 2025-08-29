@@ -2,7 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -32,7 +38,6 @@ import (
 // @name Authorization
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	env, err := env.LoadEnv()
 	if err != nil {
@@ -51,6 +56,7 @@ func main() {
 	postgresDb.AutoMigrate(&entities.Container{})
 
 	redisRawClient := databases.NewRedisFactory(env.RedisEnv).ConnectRedis()
+	defer redisRawClient.Close()
 	redisClient := interfaces.NewRedisClient(redisRawClient)
 
 	dockerClient, err := docker.NewDockerClient()
@@ -67,7 +73,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create kafka reader: %v", err)
 	}
-	kafkaConsumer := interfaces.NewKafkaConsumer(kafkaReader, containerRepository, logger)
+	defer kafkaReader.Close()
+	kafkaConsumer := interfaces.NewKafkaConsumer(kafkaReader, redisClient, containerRepository, logger)
 
 	r := gin.Default()
 	containerHandler.SetupRoutes(r)
@@ -76,14 +83,35 @@ func main() {
 	go func() {
 		for {
 			if err := kafkaConsumer.Consume(ctx); err != nil {
+				if errors.Is(err, context.Canceled) {
+					return
+				}
 				logger.Error("Failed to consume message", zap.Error(err))
 			}
 		}
 	}()
 
-	if err := r.Run(":8081"); err != nil {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	server := &http.Server{
+		Addr:    ":8081",
+		Handler: r,
+	}
+
+	go func() {
+		<-quit
+		cancel()
+
+		shutdownCtx, cancelTimeout := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelTimeout()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.Error("HTTP server shutdown failed", zap.Error(err))
+		}
+		logger.Info("Container management service stopped gracefully")
+	}()
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Failed to run service: %v", err)
-	} else {
-		logger.Info("Container management service is running on port 8081")
 	}
 }
