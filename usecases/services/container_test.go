@@ -53,11 +53,17 @@ func TestContainerServiceSuite(t *testing.T) {
 
 func (s *ContainerServiceSuite) TestCreate() {
 	containerResp := &container.CreateResponse{ID: "test-id"}
+	existingContainers := []entities.ContainerWithStatus{}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
 
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
 	s.dockerClient.EXPECT().Create(s.ctx, "container", "testcontainers/ryuk:0.12.0").Return(containerResp, nil)
 	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
 	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(nil)
 	s.mockRepo.EXPECT().Create("test-id", "container", entities.ContainerOn, "127.0.0.1").Return(&entities.Container{
 		ContainerId:   "test-id",
 		ContainerName: "container",
@@ -72,7 +78,18 @@ func (s *ContainerServiceSuite) TestCreate() {
 	s.Equal("test-id", result.ContainerId)
 }
 
+func (s *ContainerServiceSuite) TestCreateRedisGetError() {
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(nil, errors.New("redis get error"))
+	s.logger.EXPECT().Error("failed to retrieve containers from redis", gomock.Any()).Times(1)
+	result, err := s.containerService.Create(s.ctx, "container", "testcontainers/ryuk:0.12.0")
+	s.ErrorContains(err, "redis get error")
+	s.Nil(result)
+}
+
 func (s *ContainerServiceSuite) TestCreateDockerCreateError() {
+	existingContainers := []entities.ContainerWithStatus{}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
 	s.dockerClient.EXPECT().Create(s.ctx, "container", "testcontainers/ryuk:0.12.0").Return(nil, errors.New("docker create error"))
 	s.logger.EXPECT().Error("failed to create docker container", gomock.Any()).Times(1)
 
@@ -83,11 +100,17 @@ func (s *ContainerServiceSuite) TestCreateDockerCreateError() {
 
 func (s *ContainerServiceSuite) TestCreateDockerStartError() {
 	containerResp := &container.CreateResponse{ID: "test-id"}
+	existingContainers := []entities.ContainerWithStatus{}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOff},
+	}
 
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
 	s.dockerClient.EXPECT().Create(s.ctx, "container", "testcontainers/ryuk:0.12.0").Return(containerResp, nil)
 	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(errors.New("docker start error"))
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOff)
 	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("")
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(nil)
 	s.mockRepo.EXPECT().Create("test-id", "container", entities.ContainerOff, "").Return(&entities.Container{
 		ContainerId:   "test-id",
 		ContainerName: "container",
@@ -105,11 +128,17 @@ func (s *ContainerServiceSuite) TestCreateDockerStartError() {
 
 func (s *ContainerServiceSuite) TestCreateRepoError() {
 	containerResp := &container.CreateResponse{ID: "test-id"}
+	existingContainers := []entities.ContainerWithStatus{}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
 
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
 	s.dockerClient.EXPECT().Create(s.ctx, "container", "testcontainers/ryuk:0.12.0").Return(containerResp, nil)
 	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
 	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(nil)
 	s.mockRepo.EXPECT().Create("test-id", "container", entities.ContainerOn, "127.0.0.1").Return(nil, errors.New("db error"))
 	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().Delete(s.ctx, "test-id").Return(nil)
@@ -122,11 +151,17 @@ func (s *ContainerServiceSuite) TestCreateRepoError() {
 
 func (s *ContainerServiceSuite) TestCreateRepoAndDockerStopError() {
 	containerResp := &container.CreateResponse{ID: "test-id"}
+	existingContainers := []entities.ContainerWithStatus{}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
 
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
 	s.dockerClient.EXPECT().Create(s.ctx, "container", "testcontainers/ryuk:0.12.0").Return(containerResp, nil)
 	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
 	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(nil)
 	s.mockRepo.EXPECT().Create("test-id", "container", entities.ContainerOn, "127.0.0.1").Return(nil, errors.New("db error"))
 	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(errors.New("docker stop error"))
 	s.logger.EXPECT().Error("failed to create container", gomock.Any()).Times(1)
@@ -139,15 +174,88 @@ func (s *ContainerServiceSuite) TestCreateRepoAndDockerStopError() {
 
 func (s *ContainerServiceSuite) TestCreateRepoAndDockerDeleteError() {
 	containerResp := &container.CreateResponse{ID: "test-id"}
+	existingContainers := []entities.ContainerWithStatus{}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
 
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
 	s.dockerClient.EXPECT().Create(s.ctx, "container", "testcontainers/ryuk:0.12.0").Return(containerResp, nil)
 	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
 	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(nil)
 	s.mockRepo.EXPECT().Create("test-id", "container", entities.ContainerOn, "127.0.0.1").Return(nil, errors.New("db error"))
 	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().Delete(s.ctx, "test-id").Return(errors.New("docker delete error"))
 	s.logger.EXPECT().Error("failed to create container", gomock.Any()).Times(1)
+	s.logger.EXPECT().Error("failed to delete docker container", gomock.Any()).Times(1)
+
+	result, err := s.containerService.Create(s.ctx, "container", "testcontainers/ryuk:0.12.0")
+	s.ErrorContains(err, "docker delete error")
+	s.Nil(result)
+}
+
+func (s *ContainerServiceSuite) TestCreateRedisSetError() {
+	containerResp := &container.CreateResponse{ID: "test-id"}
+	existingContainers := []entities.ContainerWithStatus{}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.dockerClient.EXPECT().Create(s.ctx, "container", "testcontainers/ryuk:0.12.0").Return(containerResp, nil)
+	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
+	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
+	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(errors.New("redis set error"))
+	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
+	s.dockerClient.EXPECT().Delete(s.ctx, "test-id").Return(nil)
+	s.logger.EXPECT().Error("failed to set containers in redis", gomock.Any()).Times(1)
+
+	result, err := s.containerService.Create(s.ctx, "container", "testcontainers/ryuk:0.12.0")
+	s.ErrorContains(err, "redis set error")
+	s.Nil(result)
+}
+
+func (s *ContainerServiceSuite) TestCreateRedisSetAndDockerStopError() {
+	containerResp := &container.CreateResponse{ID: "test-id"}
+	existingContainers := []entities.ContainerWithStatus{}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.dockerClient.EXPECT().Create(s.ctx, "container", "testcontainers/ryuk:0.12.0").Return(containerResp, nil)
+	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
+	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
+	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(errors.New("redis set error"))
+	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(errors.New("docker stop error"))
+	s.logger.EXPECT().Error("failed to set containers in redis", gomock.Any()).Times(1)
+	s.logger.EXPECT().Error("failed to stop docker container", gomock.Any()).Times(1)
+
+	result, err := s.containerService.Create(s.ctx, "container", "testcontainers/ryuk:0.12.0")
+	s.ErrorContains(err, "docker stop error")
+	s.Nil(result)
+}
+
+func (s *ContainerServiceSuite) TestCreateRedisSetAndDockerDeleteError() {
+	containerResp := &container.CreateResponse{ID: "test-id"}
+	existingContainers := []entities.ContainerWithStatus{}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.dockerClient.EXPECT().Create(s.ctx, "container", "testcontainers/ryuk:0.12.0").Return(containerResp, nil)
+	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
+	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
+	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(errors.New("redis set error"))
+	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
+	s.dockerClient.EXPECT().Delete(s.ctx, "test-id").Return(errors.New("docker delete error"))
+	s.logger.EXPECT().Error("failed to set containers in redis", gomock.Any()).Times(1)
 	s.logger.EXPECT().Error("failed to delete docker container", gomock.Any()).Times(1)
 
 	result, err := s.containerService.Create(s.ctx, "container", "testcontainers/ryuk:0.12.0")
@@ -185,10 +293,17 @@ func (s *ContainerServiceSuite) TestViewInvalidRange() {
 
 func (s *ContainerServiceSuite) TestUpdateOn() {
 	updateData := dto.ContainerUpdate{Status: "ON"}
+	existingContainers := []entities.ContainerWithStatus{}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
 
 	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
 	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.logger.EXPECT().Warn("container not found in redis", zap.String("containerId", "test-id")).Times(1)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(nil)
 	s.mockRepo.EXPECT().Update("test-id", entities.ContainerOn, "127.0.0.1").Return(nil)
 	s.logger.EXPECT().Info("container updated successfully", gomock.Any()).Times(1)
 
@@ -198,10 +313,18 @@ func (s *ContainerServiceSuite) TestUpdateOn() {
 
 func (s *ContainerServiceSuite) TestUpdateOff() {
 	updateData := dto.ContainerUpdate{Status: "OFF"}
+	existingContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOff},
+	}
 
 	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOff)
 	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("")
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(nil)
 	s.mockRepo.EXPECT().Update("test-id", entities.ContainerOff, "").Return(nil)
 	s.logger.EXPECT().Info("container updated successfully", gomock.Any()).Times(1)
 
@@ -236,12 +359,51 @@ func (s *ContainerServiceSuite) TestUpdateDockerStopError() {
 	s.ErrorContains(err, "docker stop error")
 }
 
-func (s *ContainerServiceSuite) TestUpdateRepoError() {
+func (s *ContainerServiceSuite) TestUpdateRedisGetError() {
+	updateData := dto.ContainerUpdate{Status: "ON"}
+	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
+	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
+	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(nil, errors.New("redis get error"))
+	s.logger.EXPECT().Error("failed to retrieve containers from redis", gomock.Any()).Times(1)
+
+	err := s.containerService.Update(s.ctx, "test-id", updateData)
+	s.ErrorContains(err, "redis get error")
+}
+
+func (s *ContainerServiceSuite) TestUpdateRedisSetError() {
 	updateData := dto.ContainerUpdate{Status: "OFF"}
+	existingContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOff},
+	}
 
 	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOff)
 	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("")
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(errors.New("redis set error"))
+	s.logger.EXPECT().Error("failed to update containers in redis", gomock.Any()).Times(1)
+
+	err := s.containerService.Update(s.ctx, "test-id", updateData)
+	s.ErrorContains(err, "redis set error")
+}
+
+func (s *ContainerServiceSuite) TestUpdateRepoError() {
+	updateData := dto.ContainerUpdate{Status: "OFF"}
+	existingContainers := []entities.ContainerWithStatus{}
+	updatedContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOff},
+	}
+
+	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
+	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOff)
+	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("")
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.logger.EXPECT().Warn("container not found in redis", zap.String("containerId", "test-id")).Times(1)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(nil)
 	s.mockRepo.EXPECT().Update("test-id", entities.ContainerOff, "").Return(errors.New("update failed"))
 	s.logger.EXPECT().Error("failed to update container", gomock.Any()).Times(1)
 
@@ -250,9 +412,16 @@ func (s *ContainerServiceSuite) TestUpdateRepoError() {
 }
 
 func (s *ContainerServiceSuite) TestDelete() {
+	existingContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
+	updatedContainers := []entities.ContainerWithStatus{}
+
+	s.mockRepo.EXPECT().Delete("test-id").Return(nil)
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedContainers).Return(nil)
 	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().Delete(s.ctx, "test-id").Return(nil)
-	s.mockRepo.EXPECT().Delete("test-id").Return(nil)
 	s.logger.EXPECT().Info("container deleted successfully", zap.String("containerId", "test-id")).Times(1)
 
 	err := s.containerService.Delete(s.ctx, "test-id")
@@ -260,6 +429,12 @@ func (s *ContainerServiceSuite) TestDelete() {
 }
 
 func (s *ContainerServiceSuite) TestDeleteDockerStopError() {
+	existingContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
+	s.mockRepo.EXPECT().Delete("test-id").Return(nil)
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", gomock.Any()).Return(nil)
 	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(errors.New("stop failed"))
 	s.logger.EXPECT().Error("failed to stop docker container", gomock.Any()).Times(1)
 
@@ -268,6 +443,12 @@ func (s *ContainerServiceSuite) TestDeleteDockerStopError() {
 }
 
 func (s *ContainerServiceSuite) TestDeleteDockerDeleteError() {
+	existingContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
+	s.mockRepo.EXPECT().Delete("test-id").Return(nil)
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", gomock.Any()).Return(nil)
 	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().Delete(s.ctx, "test-id").Return(errors.New("delete failed"))
 	s.logger.EXPECT().Error("failed to delete docker container", gomock.Any()).Times(1)
@@ -277,13 +458,33 @@ func (s *ContainerServiceSuite) TestDeleteDockerDeleteError() {
 }
 
 func (s *ContainerServiceSuite) TestDeleteRepoError() {
-	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
-	s.dockerClient.EXPECT().Delete(s.ctx, "test-id").Return(nil)
 	s.mockRepo.EXPECT().Delete("test-id").Return(errors.New("delete failed"))
 	s.logger.EXPECT().Error("failed to delete container", gomock.Any()).Times(1)
 
 	err := s.containerService.Delete(s.ctx, "test-id")
 	s.ErrorContains(err, "delete failed")
+}
+
+func (s *ContainerServiceSuite) TestDeleteRedisGetError() {
+	s.mockRepo.EXPECT().Delete("test-id").Return(nil)
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(nil, errors.New("redis get error"))
+	s.logger.EXPECT().Error("failed to retrieve containers from redis", gomock.Any()).Times(1)
+
+	err := s.containerService.Delete(s.ctx, "test-id")
+	s.ErrorContains(err, "redis get error")
+}
+
+func (s *ContainerServiceSuite) TestDeleteRedisSetError() {
+	existingContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
+	s.mockRepo.EXPECT().Delete("test-id").Return(nil)
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingContainers, nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", gomock.Any()).Return(errors.New("redis set error"))
+	s.logger.EXPECT().Error("failed to update containers in redis", gomock.Any()).Times(1)
+
+	err := s.containerService.Delete(s.ctx, "test-id")
+	s.ErrorContains(err, "redis set error")
 }
 
 func (s *ContainerServiceSuite) TestImport() {
@@ -320,12 +521,18 @@ func (s *ContainerServiceSuite) TestImport() {
 		Ipv4:          "127.0.0.1",
 	}
 	containers := []*entities.Container{containerEntity}
+	existingRedisContainers := []entities.ContainerWithStatus{}
+	updatedRedisContainers := []entities.ContainerWithStatus{
+		{ContainerId: "test-id", Status: entities.ContainerOn},
+	}
 
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingRedisContainers, nil)
 	s.dockerClient.EXPECT().Create(s.ctx, "test-name", "nginx").Return(containerResp, nil)
 	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
 	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
 	s.mockRepo.EXPECT().CreateInBatches(containers).Return(nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", updatedRedisContainers).Return(nil)
 	s.logger.EXPECT().Info("containers imported successfully").Times(1)
 
 	resp, err := s.containerService.Import(s.ctx, file)
@@ -359,6 +566,9 @@ func (s *ContainerServiceSuite) TestImportInvalidExcelFile() {
 }
 
 func (s *ContainerServiceSuite) TestImportWithMissingHeaderRows() {
+	existingRedisContainers := []entities.ContainerWithStatus{}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingRedisContainers, nil)
 	s.logger.EXPECT().Error("failed to import containers", gomock.Any()).Times(1)
 
 	f := excelize.NewFile()
@@ -390,6 +600,9 @@ func (s *ContainerServiceSuite) TestImportWithMissingHeaderRows() {
 }
 
 func (s *ContainerServiceSuite) TestImportWithInvalidHeaderRows() {
+	existingRedisContainers := []entities.ContainerWithStatus{}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingRedisContainers, nil)
 	s.logger.EXPECT().Error("failed to import containers", gomock.Any()).Times(1)
 
 	f := excelize.NewFile()
@@ -424,6 +637,9 @@ func (s *ContainerServiceSuite) TestImportWithInvalidHeaderRows() {
 }
 
 func (s *ContainerServiceSuite) TestImportWithInvalidRows() {
+	existingRedisContainers := []entities.ContainerWithStatus{}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingRedisContainers, nil)
 	s.logger.EXPECT().Warn("skipping invalid row", gomock.Any()).Times(1)
 	s.logger.EXPECT().Info("containers imported successfully").Times(1)
 
@@ -454,11 +670,77 @@ func (s *ContainerServiceSuite) TestImportWithInvalidRows() {
 	}
 
 	s.mockRepo.EXPECT().CreateInBatches([]*entities.Container{}).Return(nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", existingRedisContainers).Return(nil)
 	resp, err := s.containerService.Import(s.ctx, fakeFile)
 	s.NoError(err)
 	s.NotNil(resp)
 	s.Equal(0, resp.SuccessCount)
 	s.Equal(0, resp.FailedCount)
+}
+
+func (s *ContainerServiceSuite) TestImportRedisGetError() {
+	f := excelize.NewFile()
+	var buf bytes.Buffer
+	err := f.Write(&buf)
+	s.Require().NoError(err)
+
+	reader := bytes.NewReader(buf.Bytes())
+	file := struct {
+		io.Reader
+		io.ReaderAt
+		io.Seeker
+		io.Closer
+	}{
+		Reader:   reader,
+		ReaderAt: reader,
+		Seeker:   reader,
+		Closer:   io.NopCloser(nil),
+	}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(nil, errors.New("redis get error"))
+	s.logger.EXPECT().Error("failed to retrieve containers from redis", gomock.Any()).Times(1)
+
+	resp, err := s.containerService.Import(s.ctx, file)
+	s.ErrorContains(err, "redis get error")
+	s.Nil(resp)
+}
+
+func (s *ContainerServiceSuite) TestImportRedisSetError() {
+	existingRedisContainers := []entities.ContainerWithStatus{}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingRedisContainers, nil)
+	s.logger.EXPECT().Info("containers imported successfully").Times(1)
+
+	f := excelize.NewFile()
+	sheetName := "Sheet1"
+	f.SetSheetName("Sheet1", sheetName)
+	f.SetCellValue(sheetName, "A1", "Container Name")
+	f.SetCellValue(sheetName, "B1", "Image Name")
+
+	var buf bytes.Buffer
+	err := f.Write(&buf)
+	s.Require().NoError(err)
+
+	reader := bytes.NewReader(buf.Bytes())
+
+	fakeFile := struct {
+		io.Reader
+		io.ReaderAt
+		io.Seeker
+		io.Closer
+	}{
+		Reader:   reader,
+		ReaderAt: reader,
+		Seeker:   reader,
+		Closer:   io.NopCloser(nil),
+	}
+
+	s.mockRepo.EXPECT().CreateInBatches([]*entities.Container{}).Return(nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", existingRedisContainers).Return(errors.New("redis set error"))
+	s.logger.EXPECT().Error("failed to update containers in redis", gomock.Any()).Times(1)
+	resp, err := s.containerService.Import(s.ctx, fakeFile)
+	s.ErrorContains(err, "redis set error")
+	s.Nil(resp)
 }
 
 func (s *ContainerServiceSuite) TestImportDockerCreateError() {
@@ -487,8 +769,12 @@ func (s *ContainerServiceSuite) TestImportDockerCreateError() {
 		Closer:   io.NopCloser(nil),
 	}
 
+	existingRedisContainers := []entities.ContainerWithStatus{}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingRedisContainers, nil)
 	s.dockerClient.EXPECT().Create(s.ctx, "test-name", "nginx").Return(nil, errors.New("create error"))
 	s.mockRepo.EXPECT().CreateInBatches([]*entities.Container{}).Return(nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", existingRedisContainers).Return(nil)
 	s.logger.EXPECT().Info("containers imported successfully").Times(1)
 
 	resp, err := s.containerService.Import(s.ctx, file)
@@ -523,7 +809,12 @@ func (s *ContainerServiceSuite) TestImportInvalidContainerField() {
 		Seeker:   reader,
 		Closer:   io.NopCloser(nil),
 	}
+
+	existingRedisContainers := []entities.ContainerWithStatus{}
+
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingRedisContainers, nil)
 	s.mockRepo.EXPECT().CreateInBatches([]*entities.Container{}).Return(nil)
+	s.redisClient.EXPECT().Set(s.ctx, "containers", existingRedisContainers).Return(nil)
 	s.logger.EXPECT().Info("containers imported successfully").Times(1)
 
 	resp, err := s.containerService.Import(s.ctx, file)
@@ -567,13 +858,16 @@ func (s *ContainerServiceSuite) TestImportRepoAndDockerStopError() {
 		Ipv4:          "127.0.0.1",
 	}
 	containers := []*entities.Container{containerEntity}
+	existingRedisContainers := []entities.ContainerWithStatus{}
 
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingRedisContainers, nil)
 	s.dockerClient.EXPECT().Create(s.ctx, "test-name", "nginx").Return(containerResp, nil)
 	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
 	s.dockerClient.EXPECT().GetIpv4(s.ctx, "test-id").Return("127.0.0.1")
 	s.mockRepo.EXPECT().CreateInBatches(containers).Return(errors.New("db error"))
 	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(errors.New("docker stop error"))
+	s.redisClient.EXPECT().Set(s.ctx, "containers", existingRedisContainers).Return(nil)
 	s.logger.EXPECT().Error("failed to stop docker container", zap.String("container_id", containerEntity.ContainerId), gomock.Any()).Times(1)
 
 	resp, err := s.containerService.Import(s.ctx, file)
@@ -617,7 +911,9 @@ func (s *ContainerServiceSuite) TestImportRepoAndDockerDeleteError() {
 		Ipv4:          "127.0.0.1",
 	}
 	containers := []*entities.Container{containerEntity}
+	existingRedisContainers := []entities.ContainerWithStatus{}
 
+	s.redisClient.EXPECT().Get(s.ctx, "containers").Return(existingRedisContainers, nil)
 	s.dockerClient.EXPECT().Create(s.ctx, "test-name", "nginx").Return(containerResp, nil)
 	s.dockerClient.EXPECT().Start(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().GetStatus(s.ctx, "test-id").Return(entities.ContainerOn)
@@ -625,6 +921,7 @@ func (s *ContainerServiceSuite) TestImportRepoAndDockerDeleteError() {
 	s.mockRepo.EXPECT().CreateInBatches(containers).Return(errors.New("db error"))
 	s.dockerClient.EXPECT().Stop(s.ctx, "test-id").Return(nil)
 	s.dockerClient.EXPECT().Delete(s.ctx, "test-id").Return(errors.New("docker stop error"))
+	s.redisClient.EXPECT().Set(s.ctx, "containers", existingRedisContainers).Return(nil)
 	s.logger.EXPECT().Error("failed to delete docker container", zap.String("container_id", containerEntity.ContainerId), gomock.Any()).Times(1)
 
 	resp, err := s.containerService.Import(s.ctx, file)

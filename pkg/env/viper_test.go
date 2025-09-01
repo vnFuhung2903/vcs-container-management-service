@@ -18,11 +18,13 @@ func TestViperSuite(t *testing.T) {
 func (suite *ViperSuite) SetupTest() {
 	envVars := []string{
 		"JWT_SECRET_KEY",
-		"MAIL_USERNAME",
-		"MAIL_PASSWORD",
+		"KAFKA_ADDRESS",
 		"POSTGRES_USER",
 		"POSTGRES_PASSWORD",
 		"POSTGRES_CONTAINER_DB",
+		"REDIS_ADDRESS",
+		"REDIS_PASSWORD",
+		"REDIS_DB",
 		"ZAP_LEVEL",
 		"ZAP_FILEPATH",
 		"ZAP_MAXSIZE",
@@ -44,17 +46,12 @@ func (suite *ViperSuite) createEnvVars(vars map[string]string) {
 
 func (suite *ViperSuite) TestLoadEnv() {
 	envContent := map[string]string{
-		"JWT_SECRET_KEY":        "test_jwt_secret",
-		"POSTGRES_HOST":         "postgres_host",
-		"POSTGRES_USER":         "test_user",
-		"POSTGRES_PASSWORD":     "test_db_password",
-		"POSTGRES_CONTAINER_DB": "test_db",
-		"POSTGRES_PORT":         "5432",
-		"ZAP_LEVEL":             "info",
-		"ZAP_FILEPATH":          "/tmp/app.log",
-		"ZAP_MAXSIZE":           "100",
-		"ZAP_MAXAGE":            "30",
-		"ZAP_MAXBACKUPS":        "5",
+		"JWT_SECRET_KEY": "test_jwt_secret",
+		"ZAP_LEVEL":      "info",
+		"ZAP_FILEPATH":   "/tmp/app.log",
+		"ZAP_MAXSIZE":    "100",
+		"ZAP_MAXAGE":     "30",
+		"ZAP_MAXBACKUPS": "5",
 	}
 
 	suite.createEnvVars(envContent)
@@ -64,46 +61,11 @@ func (suite *ViperSuite) TestLoadEnv() {
 
 	suite.Equal("test_jwt_secret", env.AuthEnv.JWTSecret)
 
-	suite.Equal("postgres_host", env.PostgresEnv.PostgresHost)
-	suite.Equal("test_user", env.PostgresEnv.PostgresUser)
-	suite.Equal("test_db_password", env.PostgresEnv.PostgresPassword)
-	suite.Equal("test_db", env.PostgresEnv.PostgresName)
-	suite.Equal("5432", env.PostgresEnv.PostgresPort)
-
 	suite.Equal("info", env.LoggerEnv.Level)
 	suite.Equal("/tmp/app.log", env.LoggerEnv.FilePath)
 	suite.Equal(100, env.LoggerEnv.MaxSize)
 	suite.Equal(30, env.LoggerEnv.MaxAge)
 	suite.Equal(5, env.LoggerEnv.MaxBackups)
-}
-
-func (suite *ViperSuite) TestLoadEnvPartialConfig() {
-	envContent := map[string]string{
-		"JWT_SECRET_KEY": "partial_secret",
-		"POSTGRES_USER":  "partial_user",
-	}
-	suite.createEnvVars(envContent)
-
-	env, err := LoadEnv()
-	suite.NoError(err)
-	suite.NotNil(env)
-
-	suite.Equal("partial_secret", env.AuthEnv.JWTSecret)
-
-	suite.Equal(100, env.LoggerEnv.MaxSize)
-	suite.Equal(10, env.LoggerEnv.MaxAge)
-	suite.Equal(30, env.LoggerEnv.MaxBackups)
-
-	suite.Equal("partial_user", env.PostgresEnv.PostgresUser)
-}
-
-func (suite *ViperSuite) TestLoadEnvEmptyConfig() {
-	envContent := map[string]string{}
-	suite.createEnvVars(envContent)
-
-	env, err := LoadEnv()
-	suite.Error(err)
-	suite.Nil(env)
 }
 
 func (suite *ViperSuite) TestLoadEnvInvalidLoggerValues() {
@@ -120,13 +82,21 @@ func (suite *ViperSuite) TestLoadEnvInvalidLoggerValues() {
 	suite.Nil(env)
 }
 
-func (suite *ViperSuite) TestLoadEnvEmptyPostgresValues() {
+func (suite *ViperSuite) TestLoadEnvInvalidRedisValues() {
 	envContent := map[string]string{
-		"JWT_SECRET_KEY":        "test_jwt_secret",
-		"POSTGRES_HOST":         "",
-		"POSTGRES_USER":         "",
-		"POSTGRES_CONTAINER_DB": "",
-		"POSTGRES_PORT":         "",
+		"JWT_SECRET_KEY": "test_jwt_secret",
+		"REDIS_DB":       "-1",
+	}
+	suite.createEnvVars(envContent)
+	env, err := LoadEnv()
+
+	suite.Error(err)
+	suite.Nil(env)
+}
+
+func (suite *ViperSuite) TestLoadEnvEmptyJwtValues() {
+	envContent := map[string]string{
+		"JWT_SECRET_KEY": "",
 	}
 
 	suite.createEnvVars(envContent)
