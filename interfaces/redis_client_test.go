@@ -4,24 +4,53 @@ import (
 	"context"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 	"github.com/vnFuhung2903/vcs-container-management-service/entities"
 )
 
-func TestRedisClient(t *testing.T) {
+type RedisClientSuite struct {
+	suite.Suite
+	miniRedis   *miniredis.Miniredis
+	redisClient *redis.Client
+	client      IRedisClient
+}
+
+func (s *RedisClientSuite) SetupTest() {
+	var err error
+	s.miniRedis, err = miniredis.Run()
+	s.Require().NoError(err)
+
 	opt := &redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       15,
+		Addr: s.miniRedis.Addr(),
 	}
-	rds := redis.NewClient(opt)
-	assert.NotNil(t, rds)
+	s.redisClient = redis.NewClient(opt)
+	s.client = NewRedisClient(s.redisClient)
+}
 
-	redisClient := NewRedisClient(rds)
-	ctx := context.Background()
-	testKey := "test-key"
+func (s *RedisClientSuite) TearDownTest() {
+	if s.redisClient != nil {
+		s.redisClient.Close()
+	}
+	if s.miniRedis != nil {
+		s.miniRedis.Close()
+	}
+}
 
+func TestRedisClientSuite(t *testing.T) {
+	suite.Run(t, new(RedisClientSuite))
+}
+
+func (s *RedisClientSuite) TestGetNonExistentKey() {
+	result, err := s.client.Get(context.Background(), "non-existent-key")
+
+	s.NoError(err)
+	s.Empty(result)
+	s.IsType([]entities.ContainerWithStatus{}, result)
+}
+
+func (s *RedisClientSuite) TestGet() {
 	testData := []entities.ContainerWithStatus{
 		{
 			ContainerId: "container-1",
@@ -33,19 +62,43 @@ func TestRedisClient(t *testing.T) {
 		},
 	}
 
-	_ = redisClient.Del(ctx, testKey)
+	testKey := "test-containers"
+	err := s.client.Set(context.Background(), testKey, testData)
+	s.NoError(err)
 
-	err := redisClient.Set(ctx, testKey, testData)
-	assert.NoError(t, err)
+	result, err := s.client.Get(context.Background(), testKey)
 
-	result, err := redisClient.Get(ctx, testKey)
-	assert.NoError(t, err)
-	assert.Equal(t, testData, result)
+	s.NoError(err)
+	s.Len(result, 2)
+	s.Equal(testData[0].ContainerId, result[0].ContainerId)
+	s.Equal(testData[0].Status, result[0].Status)
+	s.Equal(testData[1].ContainerId, result[1].ContainerId)
+	s.Equal(testData[1].Status, result[1].Status)
 
-	err = redisClient.Del(ctx, testKey)
-	assert.NoError(t, err)
+	err = s.client.Del(context.Background(), testKey)
+	s.NoError(err)
+}
 
-	result, err = redisClient.Get(ctx, testKey)
-	assert.NoError(t, err)
-	assert.Empty(t, result)
+func (s *RedisClientSuite) TestGetInvalidJSON() {
+	testKey := "test-invalid-json"
+	invalidJSON := "{invalid json data"
+	err := s.redisClient.Set(context.Background(), testKey, invalidJSON, 0).Err()
+	s.Require().NoError(err)
+
+	result, err := s.client.Get(context.Background(), testKey)
+
+	s.Error(err)
+	s.Nil(result)
+	s.Contains(err.Error(), "invalid character")
+}
+
+func (s *RedisClientSuite) TestGetContextCancellation() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result, err := s.client.Get(ctx, "any-key")
+
+	s.Error(err)
+	s.Nil(result)
+	s.Contains(err.Error(), "context canceled")
 }

@@ -3,6 +3,7 @@ module github.com/vnFuhung2903/vcs-container-management-service
 go 1.24.2
 
 require (
+	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/containerd/errdefs v1.0.0
 	github.com/docker/go-connections v0.5.0
 	github.com/gin-gonic/gin v1.10.1
@@ -105,6 +106,7 @@ require (
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/xuri/efp v0.0.1 // indirect
 	github.com/xuri/nfp v0.0.1 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.54.0 // indirect
