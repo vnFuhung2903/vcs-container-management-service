@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -25,6 +24,7 @@ import (
 	"github.com/vnFuhung2903/vcs-container-management-service/pkg/middlewares"
 	"github.com/vnFuhung2903/vcs-container-management-service/usecases/repositories"
 	"github.com/vnFuhung2903/vcs-container-management-service/usecases/services"
+	"github.com/vnFuhung2903/vcs-container-management-service/usecases/workers"
 	"go.uber.org/zap"
 )
 
@@ -37,8 +37,6 @@ import (
 // @in header
 // @name Authorization
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	env, err := env.LoadEnv()
 	if err != nil {
 		log.Fatalf("Failed to retrieve env: %v", err)
@@ -74,22 +72,15 @@ func main() {
 		log.Fatalf("Failed to create kafka reader: %v", err)
 	}
 	defer kafkaReader.Close()
-	kafkaConsumer := interfaces.NewKafkaConsumer(kafkaReader, redisClient, containerRepository, logger)
+	kafkaConsumer := interfaces.NewKafkaConsumer(kafkaReader)
 
 	r := gin.Default()
 	containerHandler.SetupRoutes(r)
 	r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
 
-	go func() {
-		for {
-			if err := kafkaConsumer.Consume(ctx); err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-				logger.Error("Failed to consume message", zap.Error(err))
-			}
-		}
-	}()
+	consumerWorker := workers.NewConsumerWorker(kafkaConsumer, redisClient, containerRepository, logger)
+	consumerWorker.Start()
+	defer consumerWorker.Stop()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -101,11 +92,9 @@ func main() {
 
 	go func() {
 		<-quit
-		cancel()
-
-		shutdownCtx, cancelTimeout := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancelTimeout()
-		if err := server.Shutdown(shutdownCtx); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
 			logger.Error("HTTP server shutdown failed", zap.Error(err))
 		}
 		logger.Info("Container management service stopped gracefully")
