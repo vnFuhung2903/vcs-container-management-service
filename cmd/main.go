@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
@@ -75,8 +76,17 @@ func main() {
 	kafkaConsumer := interfaces.NewKafkaConsumer(kafkaReader)
 
 	r := gin.Default()
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"http://container.localhost", "http://swagger.localhost"},
+		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Origin", "Content-Type", "Authorization"},
+	}))
+
 	containerHandler.SetupRoutes(r)
 	r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
 
 	consumerWorker := workers.NewConsumerWorker(kafkaConsumer, redisClient, containerRepository, logger)
 	consumerWorker.Start()
